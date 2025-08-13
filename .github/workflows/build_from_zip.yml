@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -21,7 +22,7 @@ jobs:
       - name: Unzip project
         run: unzip -o "ServerIdAppender_GitHubReady.zip" -d .
 
-      # Βρίσκουμε τον φάκελο project (εκεί που υπάρχει settings.gradle.kts)
+      # Βρίσκουμε τον φάκελο όπου υπάρχει settings.gradle.kts (ρίζα project)
       - name: Detect project dir
         id: detect
         run: |
@@ -50,18 +51,32 @@ jobs:
       - name: Install SDK components
         run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      # ⬇️ Κατεβάζουμε standalone Gradle 8.7 και τρέχουμε assembleDebug χωρίς wrapper
+      # 🔧 Δημιουργία local.properties ώστε το AGP να βρίσκει το SDK
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "${{ steps.detect.outputs.project_dir }}/local.properties"
+          cat "${{ steps.detect.outputs.project_dir }}/local.properties"
+
+      # ⬇️ Κατεβάζουμε standalone Gradle 8.7 (χωρίς wrapper)
       - name: Download Gradle 8.7
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip -O /tmp/gradle.zip
           unzip -q /tmp/gradle.zip -d $HOME
-          echo "GRADLE_HOME=$HOME/gradle-8.7" >> $GITHUB_ENV
           echo "$HOME/gradle-8.7/bin" >> $GITHUB_PATH
+
+      # (Προαιρετικό) Cache Gradle για πιο γρήγορα επόμενα builds
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
 
       - name: Build debug APK
         env:
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
           GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
         run: |
           cd "${{ steps.detect.outputs.project_dir }}"
