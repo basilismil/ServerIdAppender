@@ -21,14 +21,14 @@ jobs:
       - name: Unzip project
         run: unzip -o "ServerIdAppender_GitHubReady.zip" -d .
 
-      # βρίσκουμε τον φάκελο project (εκεί που υπάρχει settings.gradle.kts)
+      # Βρίσκουμε τον φάκελο project (εκεί που υπάρχει settings.gradle.kts)
       - name: Detect project dir
         id: detect
         run: |
           set -e
           DIR=$(find . -maxdepth 3 -type f -name "settings.gradle.kts" -printf '%h\n' | head -n1)
           if [ -z "$DIR" ]; then
-            echo "Δεν βρέθηκε settings.gradle.kts"
+            echo "❌ Δεν βρέθηκε settings.gradle.kts"
             exit 1
           fi
           echo "project_dir=$DIR" >> $GITHUB_OUTPUT
@@ -60,4 +60,16 @@ jobs:
 
       - name: Build debug APK
         env:
-          ANDROID_HOME: ${{
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+        run: |
+          cd "${{ steps.detect.outputs.project_dir }}"
+          gradle --version
+          gradle --no-daemon assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: ${{ steps.detect.outputs.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
