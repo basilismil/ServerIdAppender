@@ -5,7 +5,6 @@ on:
   push:
     paths:
       - "ServerIdAppender_GitHubReady.zip"
-      - "ServerIdAppender_GH/**"
 
 jobs:
   build:
@@ -14,26 +13,26 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install unzip
-        run: sudo apt-get update && sudo apt-get install -y unzip
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip wget
 
       - name: Unzip project
-        run: |
-          # Αποσυμπίεση στο $GITHUB_WORKSPACE
-          unzip -o "ServerIdAppender_GitHubReady.zip" -d .
-          echo "PWD after unzip:" && pwd && ls -la
+        run: unzip -o "ServerIdAppender_GitHubReady.zip" -d .
 
-      - name: Detect project dir (has settings.gradle.kts)
+      # βρίσκουμε τον φάκελο project (εκεί που υπάρχει settings.gradle.kts)
+      - name: Detect project dir
         id: detect
         run: |
           set -e
           DIR=$(find . -maxdepth 3 -type f -name "settings.gradle.kts" -printf '%h\n' | head -n1)
           if [ -z "$DIR" ]; then
-            echo "❌ Δεν βρέθηκε settings.gradle.kts"
+            echo "Δεν βρέθηκε settings.gradle.kts"
             exit 1
           fi
-          echo "Project dir: $DIR"
           echo "project_dir=$DIR" >> $GITHUB_OUTPUT
+          echo "Project dir: $DIR"
           ls -la "$DIR"
 
       - name: Set up JDK 17
@@ -51,15 +50,14 @@ jobs:
       - name: Install SDK components
         run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      # 💡 Καλούμε απευθείας το Gradle Wrapper Main από το jar (δεν χρειαζόμαστε ./gradlew)
-      - name: Build debug APK
-        working-directory: ${{ steps.detect.outputs.project_dir }}
+      # ⬇️ Κατεβάζουμε standalone Gradle 8.7 και τρέχουμε assembleDebug χωρίς wrapper
+      - name: Download Gradle 8.7
         run: |
-          ls -la gradle/wrapper || true
-          java -Xmx1g -cp gradle/wrapper/gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain --no-daemon assembleDebug
+          wget -q https://services.gradle.org/distributions/gradle-8.7-bin.zip -O /tmp/gradle.zip
+          unzip -q /tmp/gradle.zip -d $HOME
+          echo "GRADLE_HOME=$HOME/gradle-8.7" >> $GITHUB_ENV
+          echo "$HOME/gradle-8.7/bin" >> $GITHUB_PATH
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug
-          path: ${{ steps.detect.outputs.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
+      - name: Build debug APK
+        env:
+          ANDROID_HOME: ${{
